@@ -61,11 +61,9 @@ export function createMockProvider({ durationMs = DURATION_MS } = {}) {
 
   return {
     name: 'mock',
-    supportsImage: true,
-
-    async submit(request) {
+    async submit({ input }) {
       const externalId = `mock-${Date.now()}-${++counter}`;
-      jobs.set(externalId, { request, startedAt: Date.now() });
+      jobs.set(externalId, { input, startedAt: Date.now() });
       return { externalId, status: 'queued' };
     },
 
@@ -77,7 +75,7 @@ export function createMockProvider({ durationMs = DURATION_MS } = {}) {
         return { status: elapsed < durationMs * 0.15 ? 'queued' : 'running', progress: Math.min(0.99, elapsed / durationMs) };
       }
       jobs.delete(externalId);
-      const svg = renderSvg(job.request);
+      const svg = renderSvg(job.input);
       return {
         status: 'succeeded',
         progress: 1,

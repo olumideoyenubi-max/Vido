@@ -16,6 +16,7 @@ const template = $('card-template');
 
 const state = {
   config: null,
+  model: null,
   aspectRatio: '16:9',
   duration: 5,
   style: 'None',
@@ -53,8 +54,18 @@ function segmented(container, options, current, format, onChange) {
 }
 
 function setupForm(config) {
-  segmented($('aspect-ratios'), config.aspectRatios, state.aspectRatio, (v) => v, (v) => (state.aspectRatio = v));
-  segmented($('durations'), config.durations, state.duration, (v) => `${v}s`, (v) => (state.duration = v));
+  const select = $('model');
+  select.replaceChildren(
+    ...config.models.map((m) => {
+      const option = document.createElement('option');
+      option.value = m.id;
+      option.textContent = m.name;
+      return option;
+    }),
+  );
+  select.addEventListener('change', () => selectModel(select.value));
+  selectModel(config.models[0].id);
+
   segmented($('styles'), Object.keys(STYLES), state.style, (v) => v, (v) => (state.style = v));
 
   promptEl.maxLength = config.maxPromptLength;
@@ -62,11 +73,27 @@ function setupForm(config) {
   promptEl.addEventListener('input', updateCount);
   updateCount();
 
-  $('image-field').hidden = !config.supportsImage;
+  const scale = $('lora-scale');
+  scale.addEventListener('input', () => ($('lora-scale-value').textContent = Number(scale.value).toFixed(2)));
+}
 
-  const badge = $('provider-badge');
-  badge.textContent = config.model ? `${config.provider} · ${config.model}` : config.provider;
-  badge.hidden = false;
+// Rebuilds the options that depend on the model, keeping the current choice
+// where the new model supports it.
+function selectModel(id) {
+  const model = state.config.models.find((m) => m.id === id);
+  state.model = model;
+  $('model').value = model.id;
+  $('model-description').textContent = model.description;
+  $('model-license').textContent = model.license;
+
+  if (!model.aspectRatios.includes(state.aspectRatio)) state.aspectRatio = model.aspectRatios[0];
+  if (!model.durations.includes(state.duration)) state.duration = model.durations[0];
+  segmented($('aspect-ratios'), model.aspectRatios, state.aspectRatio, (v) => v, (v) => (state.aspectRatio = v));
+  segmented($('durations'), model.durations, state.duration, (v) => `${v}s`, (v) => (state.duration = v));
+
+  $('image-field').hidden = !model.supportsImage;
+  if (!model.supportsImage) setImage(null);
+  $('lora-field').hidden = !model.supportsLora;
 }
 
 // --- Start image ---------------------------------------------------------
@@ -122,13 +149,16 @@ form.addEventListener('submit', async (e) => {
   if (!base) return showFormError('Describe the video you want to create.');
 
   const styleText = STYLES[state.style];
+  const loraPath = $('lora-path').value.trim();
   const body = {
+    model: state.model.id,
     prompt: styleText ? `${base}, ${styleText}` : base,
     aspectRatio: state.aspectRatio,
     duration: state.duration,
     negativePrompt: $('negative-prompt').value.trim() || undefined,
     seed: $('seed').value === '' ? undefined : Number($('seed').value),
     image: state.image ?? undefined,
+    lora: state.model.supportsLora && loraPath ? { path: loraPath, scale: Number($('lora-scale').value) } : undefined,
   };
 
   const submit = $('submit');
@@ -195,8 +225,9 @@ function renderMedia(container, job) {
 function describe(job) {
   const status = { queued: 'Queued', running: 'Generating', succeeded: 'Ready', failed: 'Failed' }[job.status] ?? job.status;
   const when = new Date(job.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-  const parts = [status, job.aspectRatio, `${job.duration}s`];
+  const parts = [status, job.modelName ?? job.model, job.aspectRatio, `${job.duration}s`];
   if (job.hasImage) parts.push('from image');
+  if (job.lora) parts.push('LoRA');
   parts.push(when);
   return parts.join(' · ');
 }
@@ -206,6 +237,7 @@ function renderCard(job) {
   if (!card) {
     card = template.content.firstElementChild.cloneNode(true);
     card.querySelector('.reuse').addEventListener('click', () => {
+      if (state.config.models.some((m) => m.id === card.dataset.model)) selectModel(card.dataset.model);
       promptEl.value = card.dataset.prompt;
       promptEl.dispatchEvent(new Event('input'));
       promptEl.focus();
@@ -224,6 +256,7 @@ function renderCard(job) {
   }
 
   card.dataset.prompt = job.prompt;
+  card.dataset.model = job.model;
   card.querySelector('.prompt').textContent = job.prompt;
   card.querySelector('.meta').textContent = describe(job);
   renderMedia(card.querySelector('.media'), job);
@@ -241,7 +274,8 @@ function renderCard(job) {
   download.hidden = !url;
   if (url) {
     download.href = url;
-    download.download = `vido-${job.id.slice(0, 8)}.${job.output.mimeType === 'image/svg+xml' ? 'svg' : 'mp4'}`;
+    const ext = { 'image/svg+xml': 'svg', 'video/webm': 'webm', 'video/quicktime': 'mov' }[job.output.mimeType] ?? 'mp4';
+    download.download = `vido-${job.id.slice(0, 8)}.${ext}`;
   }
   return card;
 }

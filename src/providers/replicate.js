@@ -1,6 +1,5 @@
-// Replicate provider — https://replicate.com/docs/reference/http
-// Works with any video model that accepts a `prompt` input; other inputs are
-// only sent when set, since input names vary from model to model.
+// Replicate backend — https://replicate.com/docs/reference/http
+// `endpoint` is a model reference: "owner/name" or "owner/name:version".
 
 const API = 'https://api.replicate.com/v1';
 
@@ -12,9 +11,8 @@ const STATUS = {
   canceled: 'failed',
 };
 
-export function createReplicateProvider({ token, model, fetchImpl = fetch }) {
-  if (!token) throw new Error('REPLICATE_API_TOKEN is required for the replicate provider');
-  if (!model) throw new Error('REPLICATE_MODEL is required for the replicate provider');
+export function createReplicateProvider({ token, fetchImpl = fetch }) {
+  if (!token) throw new Error('REPLICATE_API_TOKEN is required for the replicate backend');
 
   async function call(path, init = {}) {
     const res = await fetchImpl(`${API}${path}`, {
@@ -39,24 +37,12 @@ export function createReplicateProvider({ token, model, fetchImpl = fetch }) {
 
   return {
     name: 'replicate',
-    model,
-    supportsImage: true,
 
-    async submit({ prompt, negativePrompt, aspectRatio, duration, seed, image }) {
-      const input = { prompt };
-      if (negativePrompt) input.negative_prompt = negativePrompt;
-      if (aspectRatio) input.aspect_ratio = aspectRatio;
-      if (duration) input.duration = duration;
-      if (seed != null) input.seed = seed;
-      if (image) {
-        input.image = image;
-        input.first_frame_image = image;
-      }
-      const path = model.includes(':')
-        ? '/predictions'
-        : `/models/${model}/predictions`;
-      const payload = model.includes(':') ? { version: model.split(':')[1], input } : { input };
-      const prediction = await call(path, { method: 'POST', body: JSON.stringify(payload) });
+    async submit({ endpoint, input }) {
+      const [model, version] = endpoint.split(':');
+      const prediction = version
+        ? await call('/predictions', { method: 'POST', body: JSON.stringify({ version, input }) })
+        : await call(`/models/${model}/predictions`, { method: 'POST', body: JSON.stringify({ input }) });
       return { externalId: prediction.id, ...translate(prediction) };
     },
 

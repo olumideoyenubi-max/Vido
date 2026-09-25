@@ -2,9 +2,11 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createProvider } from './providers/index.js';
+import { createBackends } from './providers/index.js';
+import { MODELS, publicModel } from './models.js';
 import { JobStore } from './jobs.js';
-import { ASPECT_RATIOS, DURATIONS, MAX_PROMPT_LENGTH, validateGenerateRequest } from './validate.js';
+import { MediaStore } from './media.js';
+import { MAX_PROMPT_LENGTH, validateGenerateRequest } from './validate.js';
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const PUBLIC_DIR = join(ROOT, 'public');
@@ -58,25 +60,17 @@ async function serveStatic(req, res, pathname) {
   res.end(req.method === 'HEAD' ? undefined : content);
 }
 
-export function createApp({ provider, store }) {
+export function createApp({ models, store, media }) {
   return async function handle(req, res) {
     const { pathname } = new URL(req.url, 'http://localhost');
     try {
       if (pathname === '/api/config' && req.method === 'GET') {
-        return sendJson(res, 200, {
-          provider: provider.name,
-          model: provider.model ?? null,
-          supportsImage: provider.supportsImage,
-          aspectRatios: ASPECT_RATIOS,
-          durations: DURATIONS,
-          maxPromptLength: MAX_PROMPT_LENGTH,
-        });
+        return sendJson(res, 200, { models: models.map(publicModel), maxPromptLength: MAX_PROMPT_LENGTH });
       }
 
       if (pathname === '/api/generate' && req.method === 'POST') {
-        const { value, error } = validateGenerateRequest(await readJson(req));
+        const { value, error } = validateGenerateRequest(await readJson(req), models);
         if (error) throw new HttpError(400, error);
-        if (value.image && !provider.supportsImage) throw new HttpError(400, `${provider.name} is not configured for image-to-video`);
         return sendJson(res, 202, await store.create(value));
       }
 
@@ -96,6 +90,11 @@ export function createApp({ provider, store }) {
         return;
       }
 
+      if (pathname.startsWith('/media/') && (req.method === 'GET' || req.method === 'HEAD')) {
+        if (media && (await media.serve(req, res, pathname.slice('/media/'.length)))) return;
+        throw new HttpError(404, 'Not found');
+      }
+
       if (pathname.startsWith('/api/')) throw new HttpError(404, 'Not found');
       if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(405, 'Method not allowed');
       await serveStatic(req, res, pathname);
@@ -108,14 +107,18 @@ export function createApp({ provider, store }) {
 }
 
 async function main() {
-  const provider = createProvider();
-  const store = new JobStore({ provider, file: process.env.JOBS_FILE ?? join(ROOT, 'data', 'jobs.json') });
+  const backends = createBackends();
+  const models = MODELS.filter((m) => backends[m.backend]);
+  const dataDir = process.env.DATA_DIR ?? join(ROOT, 'data');
+  const media = new MediaStore({ dir: join(dataDir, 'media') });
+  const store = new JobStore({ backends, models, media, file: join(dataDir, 'jobs.json') });
   await store.load();
 
   const port = Number(process.env.PORT ?? 3000);
-  const server = createServer(createApp({ provider, store }));
+  const server = createServer(createApp({ models, store, media }));
   server.listen(port, () => {
-    console.log(`Vido running at http://localhost:${port} (provider: ${provider.name}${provider.model ? `, model: ${provider.model}` : ''})`);
+    console.log(`Vido running at http://localhost:${port}`);
+    console.log(`Models: ${models.map((m) => `${m.name} [${m.backend}]`).join(', ')}`);
   });
 
   const shutdown = async () => {

@@ -47,14 +47,6 @@ body {
 
 .brand { display: flex; gap: 10px; align-items: center; font-weight: 700; font-size: 18px; }
 
-.badge {
-  font-size: 12px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: var(--surface-2);
-  color: var(--muted);
-}
-
 .layout {
   display: grid;
   grid-template-columns: minmax(300px, 420px) 1fr;
@@ -88,7 +80,7 @@ h2 { font-size: 17px; margin: 0 0 16px; }
 legend, .label-row { display: flex; justify-content: space-between; font-weight: 600; font-size: 13px; margin-bottom: 6px; padding: 0; }
 .muted { color: var(--muted); font-weight: 400; }
 
-textarea, input[type="text"], input[type="number"] {
+textarea, select, input[type="text"], input[type="number"] {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--border);
@@ -99,10 +91,13 @@ textarea, input[type="text"], input[type="number"] {
   resize: vertical;
 }
 
-textarea:focus, input:focus, button:focus-visible, .dropzone:focus-within, summary:focus-visible {
+textarea:focus, select:focus, input:focus, button:focus-visible, .dropzone:focus-within, summary:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+
+.hint { display: block; font-size: 12px; margin-top: 6px; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 

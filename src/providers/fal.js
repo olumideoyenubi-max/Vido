@@ -1,13 +1,12 @@
-// fal.ai provider — https://docs.fal.ai/model-apis/model-endpoints/queue
+// fal.ai backend — https://docs.fal.ai/model-apis/model-endpoints/queue
 // Uses the async queue API so long renders don't hold a connection open.
 
 const QUEUE = 'https://queue.fal.run';
 
-export function createFalProvider({ key, model, imageModel, fetchImpl = fetch }) {
-  if (!key) throw new Error('FAL_KEY is required for the fal provider');
-  if (!model) throw new Error('FAL_MODEL is required for the fal provider');
+export function createFalProvider({ key, fetchImpl = fetch }) {
+  if (!key) throw new Error('FAL_KEY is required for the fal backend');
 
-  // externalId -> { status_url, response_url } returned by the queue on submit.
+  // requestId -> { status_url, response_url } returned by the queue on submit.
   const urls = new Map();
 
   async function call(url, init = {}) {
@@ -23,7 +22,7 @@ export function createFalProvider({ key, model, imageModel, fetchImpl = fetch })
     return body;
   }
 
-  // The status/result URLs are keyed by the model's base path (owner/name),
+  // The status/result URLs are keyed by the app's base path (owner/name),
   // not the full sub-path, so fall back to building them from that.
   function fallbackUrls(endpoint, requestId) {
     const base = endpoint.split('/').slice(0, 2).join('/');
@@ -35,27 +34,16 @@ export function createFalProvider({ key, model, imageModel, fetchImpl = fetch })
 
   return {
     name: 'fal',
-    model,
-    supportsImage: Boolean(imageModel),
 
-    async submit({ prompt, negativePrompt, aspectRatio, duration, seed, image }) {
-      const endpoint = image ? imageModel : model;
-      if (!endpoint) throw new Error('FAL_IMAGE_MODEL must be set to generate from an image');
-      const input = { prompt };
-      if (negativePrompt) input.negative_prompt = negativePrompt;
-      if (aspectRatio) input.aspect_ratio = aspectRatio;
-      if (duration) input.duration = String(duration);
-      if (seed != null) input.seed = seed;
-      if (image) input.image_url = image;
-
+    async submit({ endpoint, input }) {
       const queued = await call(`${QUEUE}/${endpoint}`, { method: 'POST', body: JSON.stringify(input) });
-      const externalId = queued.request_id;
-      const fallback = fallbackUrls(endpoint, externalId);
-      urls.set(externalId, {
+      const requestId = queued.request_id;
+      const fallback = fallbackUrls(endpoint, requestId);
+      urls.set(requestId, {
         status_url: queued.status_url ?? fallback.status_url,
         response_url: queued.response_url ?? fallback.response_url,
       });
-      return { externalId: `${endpoint}::${externalId}`, status: 'queued' };
+      return { externalId: `${endpoint}::${requestId}`, status: 'queued' };
     },
 
     async poll(externalId) {

@@ -10,12 +10,17 @@
 <body>
   <header class="topbar">
     <div class="brand"><img src="favicon.svg" alt="" width="28" height="28"> Vido</div>
-    <div id="provider-badge" class="badge" hidden></div>
   </header>
 
   <main class="layout">
     <form id="generate-form" class="panel" novalidate>
       <h1>Create a video</h1>
+
+      <label class="field">
+        <span class="label-row"><span>Model</span><span id="model-license" class="muted"></span></span>
+        <select id="model"></select>
+        <span id="model-description" class="hint muted"></span>
+      </label>
 
       <label class="field">
         <span class="label-row"><span>Prompt</span><span id="prompt-count" class="muted">0</span></span>
@@ -59,6 +64,16 @@
           <span class="label-row"><span>Seed</span></span>
           <input id="seed" type="number" min="0" step="1" placeholder="Random">
         </label>
+        <div id="lora-field">
+          <label class="field">
+            <span class="label-row"><span>LoRA</span><span class="muted">your fine-tuned style</span></span>
+            <input id="lora-path" type="text" placeholder="https://…/my-style.safetensors or owner/repo" autocomplete="off" spellcheck="false">
+          </label>
+          <label class="field">
+            <span class="label-row"><span>LoRA strength</span><span id="lora-scale-value" class="muted">1.0</span></span>
+            <input id="lora-scale" type="range" min="0" max="2" step="0.05" value="1">
+          </label>
+        </div>
       </details>
 
       <p id="form-error" class="error" role="alert" hidden></p>

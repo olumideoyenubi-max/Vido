@@ -1,0 +1,12 @@
+# Install a CUDA build of PyTorch first: https://pytorch.org/get-started/locally/
+torch>=2.5
+diffusers>=0.40
+transformers>=4.51
+accelerate>=1.2
+peft>=0.15
+sentencepiece
+ftfy
+imageio
+imageio-ffmpeg
+av
+Pillow
