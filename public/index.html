@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vido — AI Video Generator</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><img src="favicon.svg" alt="" width="28" height="28"> Vido</div>
+    <div id="provider-badge" class="badge" hidden></div>
+  </header>
+
+  <main class="layout">
+    <form id="generate-form" class="panel" novalidate>
+      <h1>Create a video</h1>
+
+      <label class="field">
+        <span class="label-row"><span>Prompt</span><span id="prompt-count" class="muted">0</span></span>
+        <textarea id="prompt" name="prompt" rows="5" required
+          placeholder="A golden retriever surfing a turquoise wave at sunset, slow motion, cinematic"></textarea>
+      </label>
+
+      <div class="field">
+        <span class="label-row"><span>Style</span></span>
+        <div id="styles" class="chips" role="group" aria-label="Style presets"></div>
+      </div>
+
+      <div class="row">
+        <fieldset class="field">
+          <legend>Aspect ratio</legend>
+          <div id="aspect-ratios" class="segmented"></div>
+        </fieldset>
+        <fieldset class="field">
+          <legend>Duration</legend>
+          <div id="durations" class="segmented"></div>
+        </fieldset>
+      </div>
+
+      <div id="image-field" class="field">
+        <span class="label-row"><span>Start image <span class="muted">(optional)</span></span></span>
+        <label id="dropzone" class="dropzone">
+          <input id="image" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+          <span id="dropzone-text">Drop an image or click to animate a still</span>
+          <img id="image-preview" alt="Selected start image" hidden>
+        </label>
+        <button id="clear-image" type="button" class="link" hidden>Remove image</button>
+      </div>
+
+      <details class="field">
+        <summary>Advanced</summary>
+        <label class="field">
+          <span class="label-row"><span>Negative prompt</span></span>
+          <input id="negative-prompt" type="text" placeholder="blurry, distorted, text, watermark">
+        </label>
+        <label class="field">
+          <span class="label-row"><span>Seed</span></span>
+          <input id="seed" type="number" min="0" step="1" placeholder="Random">
+        </label>
+      </details>
+
+      <p id="form-error" class="error" role="alert" hidden></p>
+      <button id="submit" type="submit" class="primary">Generate video</button>
+    </form>
+
+    <section class="gallery-wrap" aria-labelledby="gallery-title">
+      <h2 id="gallery-title">Your videos</h2>
+      <p id="empty" class="muted empty">Nothing yet — describe a scene and hit Generate.</p>
+      <ul id="gallery" class="gallery"></ul>
+    </section>
+  </main>
+
+  <template id="card-template">
+    <li class="card">
+      <div class="media"></div>
+      <div class="card-body">
+        <p class="prompt"></p>
+        <p class="meta muted"></p>
+        <div class="progress" hidden><div class="bar"></div></div>
+        <p class="error" hidden></p>
+        <div class="actions">
+          <a class="download" download hidden>Download</a>
+          <button type="button" class="reuse link">Reuse prompt</button>
+          <button type="button" class="delete link danger">Delete</button>
+        </div>
+      </div>
+    </li>
+  </template>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

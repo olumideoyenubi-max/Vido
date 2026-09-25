@@ -1,0 +1,232 @@
+:root {
+  --bg: #f6f6fb;
+  --surface: #ffffff;
+  --surface-2: #eeeef6;
+  --text: #16161f;
+  --muted: #6a6a7c;
+  --border: #dcdce8;
+  --accent: #6d4dff;
+  --accent-2: #ff4f9d;
+  --accent-text: #ffffff;
+  --danger: #d0304a;
+  --radius: 14px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e0e14;
+    --surface: #17171f;
+    --surface-2: #22222d;
+    --text: #ececf4;
+    --muted: #9a9aae;
+    --border: #2d2d3a;
+    --accent: #8b72ff;
+    --danger: #ff6b82;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.brand { display: flex; gap: 10px; align-items: center; font-weight: 700; font-size: 18px; }
+
+.badge {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 420px) 1fr;
+  gap: 24px;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px;
+  align-items: start;
+}
+
+@media (max-width: 820px) {
+  .layout { grid-template-columns: 1fr; padding: 16px; }
+  .topbar { padding: 12px 16px; }
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  position: sticky;
+  top: 24px;
+}
+
+@media (max-width: 820px) { .panel { position: static; } }
+
+h1 { font-size: 20px; margin: 0 0 16px; }
+h2 { font-size: 17px; margin: 0 0 16px; }
+
+.field { display: block; border: 0; padding: 0; margin: 0 0 16px; min-width: 0; }
+legend, .label-row { display: flex; justify-content: space-between; font-weight: 600; font-size: 13px; margin-bottom: 6px; padding: 0; }
+.muted { color: var(--muted); font-weight: 400; }
+
+textarea, input[type="text"], input[type="number"] {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
+textarea:focus, input:focus, button:focus-visible, .dropzone:focus-within, summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.segmented { display: flex; background: var(--surface-2); border-radius: 10px; padding: 3px; }
+.segmented button {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 7px 4px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.segmented button[aria-pressed="true"] { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / 0.12); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  padding: 5px 11px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.chips button[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+
+.dropzone {
+  display: grid;
+  place-items: center;
+  min-height: 90px;
+  border: 1.5px dashed var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+.dropzone.dragging { border-color: var(--accent); background: var(--surface-2); }
+.dropzone img { max-width: 100%; max-height: 160px; border-radius: 8px; }
+
+details summary { cursor: pointer; font-weight: 600; font-size: 13px; margin-bottom: 10px; }
+
+button.primary {
+  width: 100%;
+  padding: 12px;
+  border: 0;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: var(--accent-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+button.primary:disabled { opacity: 0.6; cursor: progress; }
+
+button.link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.danger { color: var(--danger) !important; }
+.error { color: var(--danger); font-size: 13px; margin: 0 0 12px; }
+
+.empty { padding: 40px 0; text-align: center; }
+
+.gallery {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.media {
+  aspect-ratio: 16 / 9;
+  max-height: 420px;
+  width: 100%;
+  background: var(--surface-2);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.media video, .media img { width: 100%; height: 100%; object-fit: contain; background: #000; }
+.media .spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.card-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.card .prompt { margin: 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.card .meta { margin: 0; font-size: 12px; }
+.card .error { margin: 0; }
+
+.progress { height: 4px; background: var(--surface-2); border-radius: 2px; overflow: hidden; }
+.progress .bar { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width 0.4s; }
+
+.actions { display: flex; gap: 14px; align-items: center; margin-top: auto; padding-top: 6px; font-size: 13px; }
+.actions a { color: var(--accent); text-decoration: none; font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  .media .spinner { animation-duration: 3s; }
+  .progress .bar { transition: none; }
+}
