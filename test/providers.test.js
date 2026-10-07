@@ -107,3 +107,26 @@ test('createBackends enables what is configured', () => {
   assert.deepEqual(Object.keys(createBackends({ REPLICATE_API_TOKEN: 't', ENABLE_MOCK: 'true' })), ['replicate', 'mock']);
   assert.deepEqual(Object.keys(createBackends({ ENABLE_MOCK: 'false' })), []);
 });
+
+test('cancel calls each backend\'s cancel route', async () => {
+  const rep = fakeFetch([{ body: { id: 'p1', status: 'canceled' } }]);
+  await createReplicateProvider({ token: 't', fetchImpl: rep.impl }).cancel('p1');
+  assert.deepEqual([rep.calls[0].method, rep.calls[0].url], ['POST', 'https://api.replicate.com/v1/predictions/p1/cancel']);
+
+  const fal = fakeFetch([
+    { body: { request_id: 'r1', cancel_url: 'https://queue.fal.run/fal-ai/wan/requests/r1/cancel' } },
+    { status: 202, body: { status: 'CANCELLATION_REQUESTED' } },
+    { status: 202, body: {} },
+  ]);
+  const falProvider = createFalProvider({ key: 'k', fetchImpl: fal.impl });
+  const { externalId } = await falProvider.submit({ endpoint: 'fal-ai/wan/v2.2-a14b/text-to-video', input: { prompt: 'x' } });
+  await falProvider.cancel(externalId);
+  assert.deepEqual([fal.calls[1].method, fal.calls[1].url], ['PUT', 'https://queue.fal.run/fal-ai/wan/requests/r1/cancel']);
+  // After a restart the URL is rebuilt from the endpoint.
+  await falProvider.cancel('fal-ai/wan/v2.2-a14b/text-to-video::r2');
+  assert.equal(fal.calls[2].url, 'https://queue.fal.run/fal-ai/wan/requests/r2/cancel');
+
+  const local = fakeFetch([{ body: { id: 'j1', status: 'canceled' } }]);
+  await createLocalProvider({ url: 'http://gpu:8188', fetchImpl: local.impl }).cancel('j1');
+  assert.deepEqual([local.calls[0].method, local.calls[0].url], ['POST', 'http://gpu:8188/jobs/j1/cancel']);
+});

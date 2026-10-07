@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
-const TERMINAL = new Set(['succeeded', 'failed']);
+const TERMINAL = new Set(['succeeded', 'failed', 'canceled']);
+const ACTIVE = new Set(['queued', 'running']);
 
 // Tracks generation jobs, polls each model's backend until the job finishes,
 // copies the result into the media store, and persists history to a JSON
@@ -63,6 +64,8 @@ export class JobStore {
       hasImage: Boolean(request.image),
       status: 'queued',
       progress: 0,
+      progressEstimated: false,
+      startedAt: null,
       output: null,
       error: null,
       externalId: null,
@@ -76,6 +79,11 @@ export class JobStore {
       const backend = this.#backend(job);
       const result = await backend.submit({ endpoint: model.endpoint(request), input: model.input(request) });
       job.externalId = result.externalId;
+      // Canceled (or deleted) while the submit was in flight.
+      if (job.status === 'canceled' || !this.jobs.has(job.id)) {
+        this.#cancelRemote(job);
+        return publicView(job);
+      }
       await this.#settle(job, result);
     } catch (err) {
       this.#apply(job, { status: 'failed', error: err.message });
@@ -85,7 +93,23 @@ export class JobStore {
     return publicView(job);
   }
 
+  // Stops a queued or running job and asks its backend to stop too, so it
+  // isn't left running (and billing). Returns the job, or undefined.
+  cancel(id) {
+    const job = this.jobs.get(id);
+    if (!job) return undefined;
+    if (ACTIVE.has(job.status)) {
+      clearTimeout(this.timers.get(id));
+      this.timers.delete(id);
+      this.#apply(job, { status: 'canceled' });
+      this.#cancelRemote(job);
+      this.#save();
+    }
+    return publicView(job);
+  }
+
   delete(id) {
+    this.cancel(id);
     clearTimeout(this.timers.get(id));
     this.timers.delete(id);
     const existed = this.jobs.delete(id);
@@ -102,6 +126,15 @@ export class JobStore {
     return this.saving;
   }
 
+  // Best effort: the job is already canceled here whatever the backend says.
+  // Without an externalId the submit is still in flight; create() calls this
+  // again once it returns.
+  #cancelRemote(job) {
+    const backend = this.backends[job.backend];
+    if (!job.externalId || !backend?.cancel) return;
+    backend.cancel(job.externalId).catch((err) => console.warn(`Could not cancel job ${job.id} on ${job.backend}: ${err.message}`));
+  }
+
   #backend(job) {
     const backend = this.backends[job.backend];
     if (!backend) throw new Error(`The ${job.backend} backend is not configured on this server`);
@@ -116,7 +149,10 @@ export class JobStore {
       this.#apply(job, { status: 'failed', error: 'Job was interrupted before it reached the backend' });
     } else {
       try {
-        await this.#settle(job, await this.#backend(job).poll(job.externalId));
+        const result = await this.#backend(job).poll(job.externalId);
+        // Canceled while the poll was in flight: keep it canceled.
+        if (TERMINAL.has(job.status)) return;
+        await this.#settle(job, result);
         job.pollFailures = 0;
       } catch (err) {
         job.pollFailures = (job.pollFailures ?? 0) + 1;
@@ -145,7 +181,7 @@ export class JobStore {
         console.warn(`Could not save video for job ${job.id}, keeping the provider link: ${err.message}`);
       }
     }
-    if (!this.jobs.has(job.id)) {
+    if (!this.jobs.has(job.id) || job.status === 'canceled') {
       this.media?.remove(job.id);
       return;
     }
@@ -159,12 +195,32 @@ export class JobStore {
   }
 
   #apply(job, { status, progress, output, error }) {
+    const now = new Date();
     if (status) job.status = status;
-    if (progress != null) job.progress = progress;
-    if (status === 'succeeded') job.progress = 1;
+    if (status === 'running' && !job.startedAt) job.startedAt = now.toISOString();
+    if (progress != null) {
+      job.progress = progress;
+      job.progressEstimated = false;
+    } else if (status === 'running') {
+      this.#estimateProgress(job, now);
+    }
+    if (status === 'succeeded') {
+      job.progress = 1;
+      job.progressEstimated = false;
+    }
     if (output) job.output = output;
     if (error) job.error = error;
-    job.updatedAt = new Date().toISOString();
+    job.updatedAt = now.toISOString();
+  }
+
+  // fal and Replicate don't report progress, so estimate it from how long
+  // this model usually takes. Capped below 100% since it's only a guess.
+  #estimateProgress(job, now) {
+    const typical = this.models.get(job.model)?.typicalSeconds;
+    if (!typical) return;
+    const elapsed = (now - new Date(job.startedAt)) / 1000;
+    job.progress = Math.min(0.95, elapsed / (typical * (job.duration / 5)));
+    job.progressEstimated = true;
   }
 
   #trim() {

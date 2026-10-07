@@ -67,6 +67,10 @@ export function createMockProvider({ durationMs = DURATION_MS } = {}) {
       return { externalId, status: 'queued' };
     },
 
+    async cancel(externalId) {
+      jobs.delete(externalId);
+    },
+
     async poll(externalId) {
       const job = jobs.get(externalId);
       if (!job) return { status: 'failed', error: 'Unknown mock job (server restarted?)' };

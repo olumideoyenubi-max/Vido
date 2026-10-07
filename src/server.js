@@ -90,6 +90,13 @@ export function createApp({ models, store, media }) {
         return;
       }
 
+      const cancelMatch = /^\/api\/jobs\/([\w-]+)\/cancel$/.exec(pathname);
+      if (cancelMatch && req.method === 'POST') {
+        const job = store.cancel(cancelMatch[1]);
+        if (!job) throw new HttpError(404, 'Job not found');
+        return sendJson(res, 200, job);
+      }
+
       if (pathname.startsWith('/media/') && (req.method === 'GET' || req.method === 'HEAD')) {
         if (media && (await media.serve(req, res, pathname.slice('/media/'.length)))) return;
         throw new HttpError(404, 'Not found');

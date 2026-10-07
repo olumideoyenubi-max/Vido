@@ -77,9 +77,14 @@ A LoRA only works with the model family it was trained on. Wan 2.2 LoRAs work wi
 | `GET` | `/api/config` | Available models and their options |
 | `POST` | `/api/generate` | `{ model?, prompt, aspectRatio?, duration?, negativePrompt?, seed?, image?, lora? }` → `202` with a job |
 | `GET` | `/api/jobs` | All jobs, newest first |
-| `GET` | `/api/jobs/:id` | One job: `status` is `queued`, `running`, `succeeded` or `failed`; `output.url` is set when done |
-| `DELETE` | `/api/jobs/:id` | Remove a job and its video |
+| `GET` | `/api/jobs/:id` | One job: `status` is `queued`, `running`, `succeeded`, `failed` or `canceled`; `output.url` is set when done |
+| `POST` | `/api/jobs/:id/cancel` | Stop a queued or running job, on its backend too |
+| `DELETE` | `/api/jobs/:id` | Remove a job and its video (cancels it first if it's still running) |
 | `GET` | `/media/:file` | Saved videos (supports Range requests) |
+
+`progress` runs from 0 to 1. fal and Replicate don't report progress, so for their models it's estimated from the model's typical render time (`typicalSeconds` in `src/models.js`), capped at 95%, and `progressEstimated` is `true`.
+
+Cancelling removes a queued job from fal's queue, stops a Replicate prediction, and stops the GPU worker at its next step. A model that is still loading finishes loading first. fal can only stop a job that has already started if the model supports it, so you may still be charged for it.
 
 `image` is a base64 data URL (PNG, JPEG, WebP or GIF, up to 8 MB). `lora` is `{ path, scale }`, where `scale` is between 0 and 2.
 

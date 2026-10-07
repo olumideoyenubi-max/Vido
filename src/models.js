@@ -2,6 +2,9 @@
 // Vido request onto its backend's inputs. A model only shows up in the app
 // when its backend is configured (see src/providers/index.js).
 //
+// typicalSeconds (optional) is how long a 5s clip usually takes; it drives
+// the progress estimate for backends that don't report progress.
+//
 // Every request passed to endpoint()/input() has already been validated:
 // { prompt, negativePrompt?, aspectRatio, duration, seed?, image?, lora? }
 // where lora is { path, scale }.
@@ -20,6 +23,8 @@ export const MODELS = [
     durations: [5, 10],
     supportsImage: true,
     supportsLora: true,
+    // Rough render time for a 5s clip, used to estimate progress.
+    typicalSeconds: 150,
     endpoint: ({ image, lora }) => `${FAL_WAN}/${image ? 'image-to-video' : 'text-to-video'}${lora ? '/lora' : ''}`,
     input: (req) =>
       compact({
@@ -46,6 +51,7 @@ export const MODELS = [
     durations: [5],
     supportsImage: true,
     supportsLora: false,
+    typicalSeconds: 45,
     endpoint: ({ image }) => (image ? 'wan-video/wan-2.2-i2v-fast' : 'wan-video/wan-2.2-t2v-fast'),
     input: (req) =>
       compact({

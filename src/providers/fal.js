@@ -6,7 +6,7 @@ const QUEUE = 'https://queue.fal.run';
 export function createFalProvider({ key, fetchImpl = fetch }) {
   if (!key) throw new Error('FAL_KEY is required for the fal backend');
 
-  // requestId -> { status_url, response_url } returned by the queue on submit.
+  // requestId -> { status_url, response_url, cancel_url } returned by the queue on submit.
   const urls = new Map();
 
   async function call(url, init = {}) {
@@ -29,6 +29,7 @@ export function createFalProvider({ key, fetchImpl = fetch }) {
     return {
       status_url: `${QUEUE}/${base}/requests/${requestId}/status`,
       response_url: `${QUEUE}/${base}/requests/${requestId}`,
+      cancel_url: `${QUEUE}/${base}/requests/${requestId}/cancel`,
     };
   }
 
@@ -42,6 +43,7 @@ export function createFalProvider({ key, fetchImpl = fetch }) {
       urls.set(requestId, {
         status_url: queued.status_url ?? fallback.status_url,
         response_url: queued.response_url ?? fallback.response_url,
+        cancel_url: queued.cancel_url ?? fallback.cancel_url,
       });
       return { externalId: `${endpoint}::${requestId}`, status: 'queued' };
     },
@@ -59,6 +61,14 @@ export function createFalProvider({ key, fetchImpl = fetch }) {
       const video = result.video ?? result.videos?.[0];
       if (!video?.url) return { status: 'failed', error: result.detail ?? 'Model returned no video' };
       return { status: 'succeeded', output: { url: video.url, mimeType: video.content_type ?? 'video/mp4' } };
+    },
+
+    // Removes a queued request; a running one is sent a stop signal.
+    async cancel(externalId) {
+      const [endpoint, requestId] = externalId.split('::');
+      const { cancel_url } = urls.get(requestId) ?? fallbackUrls(endpoint, requestId);
+      urls.delete(requestId);
+      await call(cancel_url, { method: 'PUT' });
     },
   };
 }

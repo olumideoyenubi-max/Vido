@@ -49,5 +49,9 @@ export function createReplicateProvider({ token, fetchImpl = fetch }) {
     async poll(externalId) {
       return translate(await call(`/predictions/${encodeURIComponent(externalId)}`));
     },
+
+    async cancel(externalId) {
+      await call(`/predictions/${encodeURIComponent(externalId)}/cancel`, { method: 'POST' });
+    },
   };
 }

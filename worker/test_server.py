@@ -34,6 +34,11 @@ class FakeRunner:
         self.calls.append(params)
         if params["prompt"] == "explode":
             raise RuntimeError("CUDA out of memory")
+        if params["prompt"] == "slow":
+            # Like a diffusion loop: report progress after every step.
+            for step in range(200):
+                time.sleep(0.01)
+                on_progress(step / 200)
         on_progress(0.5)
         with open(path, "wb") as f:
             f.write(b"fake mp4 for " + params["prompt"].encode())
@@ -93,7 +98,7 @@ class ServerTest(unittest.TestCase):
     def wait(self, job_id):
         for _ in range(200):
             status, job = self.request(f"/jobs/{job_id}")
-            if job["status"] in ("succeeded", "failed"):
+            if job["status"] in ("succeeded", "failed", "canceled"):
                 return job
             time.sleep(0.01)
         self.fail("job did not finish")
@@ -111,6 +116,24 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(done["status"], "failed")
         self.assertIn("CUDA out of memory", done["error"])
         self.assertEqual(self.request(f"/jobs/{job['id']}/video")[0], 404)
+
+    def test_cancel_running_and_queued_jobs(self):
+        _, running = self.request("/jobs", {"model": "ltx-2", "prompt": "slow"})
+        _, queued = self.request("/jobs", {"model": "ltx-2", "prompt": "never runs"})
+        for _ in range(100):
+            if self.request(f"/jobs/{running['id']}")[1]["status"] == "running":
+                break
+            time.sleep(0.01)
+
+        status, job = self.request(f"/jobs/{queued['id']}/cancel", {})
+        self.assertEqual((status, job["status"]), (200, "canceled"))
+        self.request(f"/jobs/{running['id']}/cancel", {})
+        self.assertEqual(self.wait(running["id"])["status"], "canceled")
+        time.sleep(0.05)
+        self.assertEqual(self.request(f"/jobs/{queued['id']}")[1]["status"], "canceled")
+        self.assertEqual([c["prompt"] for c in self.runner.calls], ["slow"])
+        self.assertEqual(self.request(f"/jobs/{running['id']}/video")[0], 404)
+        self.assertEqual(self.request("/jobs/" + "0" * 32 + "/cancel", {})[0], 404)
 
     def test_auth_and_errors(self):
         self.assertEqual(self.request("/health", token=None)[0], 401)

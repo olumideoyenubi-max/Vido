@@ -222,8 +222,14 @@ function renderMedia(container, job) {
   }
 }
 
+function formatElapsed(since) {
+  const seconds = Math.max(0, Math.round((Date.now() - new Date(since)) / 1000));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
 function describe(job) {
-  const status = { queued: 'Queued', running: 'Generating', succeeded: 'Ready', failed: 'Failed' }[job.status] ?? job.status;
+  let status = { queued: 'Queued', running: 'Generating', succeeded: 'Ready', failed: 'Failed', canceled: 'Canceled' }[job.status] ?? job.status;
+  if (ACTIVE.has(job.status)) status += ` ${formatElapsed(job.createdAt)}`;
   const when = new Date(job.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
   const parts = [status, job.modelName ?? job.model, job.aspectRatio, `${job.duration}s`];
   if (job.hasImage) parts.push('from image');
@@ -243,6 +249,18 @@ function renderCard(job) {
       promptEl.focus();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     });
+    card.querySelector('.cancel').addEventListener('click', async (e) => {
+      e.target.disabled = true;
+      try {
+        const updated = await api(`/api/jobs/${job.id}/cancel`, { method: 'POST' });
+        state.jobs = state.jobs.map((j) => (j.id === updated.id ? updated : j));
+        render();
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        e.target.disabled = false;
+      }
+    });
     card.querySelector('.delete').addEventListener('click', async () => {
       try {
         await api(`/api/jobs/${job.id}`, { method: 'DELETE' });
@@ -261,9 +279,13 @@ function renderCard(job) {
   card.querySelector('.meta').textContent = describe(job);
   renderMedia(card.querySelector('.media'), job);
 
+  const active = ACTIVE.has(job.status);
+  card.querySelector('.cancel').hidden = !active;
   const progress = card.querySelector('.progress');
-  progress.hidden = !ACTIVE.has(job.status);
-  progress.querySelector('.bar').style.width = `${Math.round((job.progress || 0.03) * 100)}%`;
+  progress.hidden = !active;
+  const percent = Math.round((job.progress || 0.03) * 100);
+  progress.querySelector('.bar').style.width = `${percent}%`;
+  progress.title = job.progressEstimated ? `About ${percent}% (estimated from typical render time)` : `${percent}%`;
 
   const error = card.querySelector('.error');
   error.hidden = !job.error;

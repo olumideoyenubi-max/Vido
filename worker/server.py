@@ -5,6 +5,7 @@ Implements the small HTTP API that Vido's `local` backend talks to:
     POST /jobs            {model, prompt, ...}  -> 202 {id, status}
     GET  /jobs/<id>       -> {id, status, progress, error}
     GET  /jobs/<id>/video -> the finished MP4
+    POST /jobs/<id>/cancel -> {id, status}
     GET  /health          -> {models, busy}
 
 Jobs run one at a time on a single background thread, since one GPU can only
@@ -32,6 +33,11 @@ MAX_BODY_BYTES = 12 * 1024 * 1024
 MAX_PROMPT_LENGTH = 2000
 IMAGE_DATA_URL = re.compile(r"^data:image/(png|jpeg|webp|gif);base64,([A-Za-z0-9+/=]+)$")
 JOB_PATH = re.compile(r"^/jobs/([0-9a-f]{32})(/video)?$")
+CANCEL_PATH = re.compile(r"^/jobs/([0-9a-f]{32})/cancel$")
+
+
+class Canceled(Exception):
+    """Raised from the progress callback to stop a running generation."""
 
 
 class JobQueue:
@@ -55,6 +61,7 @@ class JobQueue:
             "error": None,
             "path": None,
             "created": time.time(),
+            "cancel": False,
         }
         with self.lock:
             self.jobs[job["id"]] = job
@@ -68,6 +75,18 @@ class JobQueue:
             if job is None:
                 return None
             return {k: job[k] for k in ("id", "status", "progress", "error")}
+
+    def cancel(self, job_id):
+        """Drops a queued job, or stops a running one at its next step."""
+        with self.lock:
+            job = self.jobs.get(job_id)
+            if job is None:
+                return None
+            if job["status"] == "queued":
+                job["status"] = "canceled"
+            elif job["status"] == "running":
+                job["cancel"] = True
+        return self.view(job_id)
 
     def video_path(self, job_id):
         with self.lock:
@@ -87,24 +106,32 @@ class JobQueue:
         while True:
             job_id, params = self.pending.get()
             with self.lock:
-                if job_id not in self.jobs:
+                job = self.jobs.get(job_id)
+                if job is None or job["status"] != "queued":
                     continue
-            self._update(job_id, status="running")
+                job["status"] = "running"
             path = os.path.join(self.output_dir, f"{job_id}.mp4")
 
-            def on_progress(fraction, job_id=job_id):
-                self._update(job_id, progress=max(0.0, min(0.99, float(fraction))))
+            def on_progress(fraction, job=job):
+                with self.lock:
+                    if job["cancel"]:
+                        raise Canceled()
+                    job["progress"] = max(0.0, min(0.99, float(fraction)))
 
             try:
                 self.runner.generate(params, path, on_progress)
                 self._update(job_id, status="succeeded", progress=1.0, path=path)
+            except Canceled:
+                self._update(job_id, status="canceled")
+                if os.path.exists(path):
+                    os.remove(path)
             except Exception as err:  # report any model failure to the caller
                 traceback.print_exc()
                 self._update(job_id, status="failed", error=f"{type(err).__name__}: {err}")
 
     def _trim(self):
         finished = sorted(
-            (j for j in self.jobs.values() if j["status"] in ("succeeded", "failed")),
+            (j for j in self.jobs.values() if j["status"] in ("succeeded", "failed", "canceled")),
             key=lambda j: j["created"],
         )
         for job in finished[: max(0, len(self.jobs) - self.max_jobs)]:
@@ -224,6 +251,10 @@ def make_handler(jobs, models, token=None):
         def do_POST(self):
             if not self._authorized():
                 return
+            cancel = CANCEL_PATH.match(self.path)
+            if cancel:
+                job = jobs.cancel(cancel.group(1))
+                return self._json(200, job) if job else self._json(404, {"error": "job not found"})
             if self.path != "/jobs":
                 return self._json(404, {"error": "not found"})
             length = int(self.headers.get("Content-Length") or 0)

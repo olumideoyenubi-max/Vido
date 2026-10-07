@@ -142,3 +142,100 @@ test('keeps at most maxJobs, dropping the oldest', async () => {
   assert.equal(store.get(first.id), undefined);
   await store.close();
 });
+
+test('cancel stops polling and tells the backend', async () => {
+  const canceled = [];
+  let polls = 0;
+  const store = fakeSetup({
+    submit: async () => ({ externalId: 'e1', status: 'running' }),
+    poll: async () => (polls++, { status: 'running' }),
+    cancel: async (id) => canceled.push(id),
+  });
+  const job = await store.create(fakeRequest);
+  const result = store.cancel(job.id);
+  assert.equal(result.status, 'canceled');
+  assert.deepEqual(canceled, ['e1']);
+  const before = polls;
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(polls, before);
+  // Canceling a finished job is a no-op.
+  assert.equal(store.cancel(job.id).status, 'canceled');
+  assert.deepEqual(canceled, ['e1']);
+  assert.equal(store.cancel('missing'), undefined);
+});
+
+test('a cancel during submit cancels remotely once the submit returns', async () => {
+  const canceled = [];
+  let finishSubmit;
+  const store = fakeSetup({
+    submit: () => new Promise((r) => (finishSubmit = () => r({ externalId: 'late', status: 'queued' }))),
+    poll: async () => ({ status: 'running' }),
+    cancel: async (id) => canceled.push(id),
+  });
+  const pending = store.create(fakeRequest);
+  await new Promise((r) => setTimeout(r, 5));
+  const [job] = store.list();
+  store.cancel(job.id);
+  assert.deepEqual(canceled, []);
+  finishSubmit();
+  assert.equal((await pending).status, 'canceled');
+  assert.deepEqual(canceled, ['late']);
+});
+
+test('a poll that finishes after cancel does not resurrect the job', async () => {
+  let finishPoll;
+  const store = fakeSetup({
+    submit: async () => ({ externalId: 'e1', status: 'running' }),
+    poll: () => new Promise((r) => (finishPoll = () => r({ status: 'succeeded', output: { url: 'https://x/v.mp4' } }))),
+    cancel: async () => {},
+  });
+  const job = await store.create(fakeRequest);
+  await waitFor(() => finishPoll);
+  store.cancel(job.id);
+  finishPoll();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(store.get(job.id).status, 'canceled');
+  assert.equal(store.get(job.id).output, null);
+});
+
+test('delete cancels an active job on its backend', async () => {
+  const canceled = [];
+  const store = fakeSetup({
+    submit: async () => ({ externalId: 'e9', status: 'running' }),
+    poll: async () => ({ status: 'running' }),
+    cancel: async (id) => canceled.push(id),
+  });
+  const job = await store.create(fakeRequest);
+  store.delete(job.id);
+  assert.deepEqual(canceled, ['e9']);
+});
+
+test('estimates progress from typical render time when the backend gives none', async () => {
+  const model = { ...mockModel, id: 'est', backend: 'fake', typicalSeconds: 0.1, endpoint: () => 'ep', input: (r) => r };
+  const store = new JobStore({
+    backends: { fake: { submit: async () => ({ externalId: 'e', status: 'running' }), poll: async () => ({ status: 'running' }) } },
+    models: [model],
+    pollIntervalMs: 10,
+  });
+  const job = await store.create({ ...fakeRequest, model: 'est' });
+  assert.ok(job.startedAt);
+  await waitFor(() => store.get(job.id).progress >= 0.95);
+  const current = store.get(job.id);
+  assert.equal(current.progress, 0.95, 'capped below 100%');
+  assert.equal(current.progressEstimated, true);
+  store.cancel(job.id);
+});
+
+test('real progress from the backend is used as is', async () => {
+  const model = { ...mockModel, id: 'real', backend: 'fake', typicalSeconds: 0.01, endpoint: () => 'ep', input: (r) => r };
+  const store = new JobStore({
+    backends: { fake: { submit: async () => ({ externalId: 'e', status: 'running', progress: 0.25 }), poll: async () => ({ status: 'running', progress: 0.4 }) } },
+    models: [model],
+    pollIntervalMs: 5,
+  });
+  const job = await store.create({ ...fakeRequest, model: 'real' });
+  assert.equal(job.progress, 0.25);
+  await waitFor(() => store.get(job.id).progress === 0.4);
+  assert.equal(store.get(job.id).progressEstimated, false);
+  store.cancel(job.id);
+});

@@ -3,6 +3,7 @@
 //   POST /jobs            { model, prompt, ... } -> { id, status }
 //   GET  /jobs/:id        -> { status, progress, error }
 //   GET  /jobs/:id/video  -> video/mp4
+//   POST /jobs/:id/cancel -> { id, status }
 
 export function createLocalProvider({ url, token, fetchImpl = fetch }) {
   if (!url) throw new Error('LOCAL_WORKER_URL is required for the local backend');
@@ -37,6 +38,10 @@ export function createLocalProvider({ url, token, fetchImpl = fetch }) {
       }
       if (job.status === 'failed') return { status: 'failed', error: job.error ?? 'Worker job failed' };
       return { status: job.status === 'running' ? 'running' : 'queued', progress: job.progress };
+    },
+
+    async cancel(externalId) {
+      await call(`/jobs/${encodeURIComponent(externalId)}/cancel`, { method: 'POST' });
     },
   };
 }

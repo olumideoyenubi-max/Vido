@@ -60,6 +60,16 @@ test('generate -> poll -> list -> delete', async () => {
   assert.equal((await fetch(`${base}/api/jobs/${job.id}`)).status, 404);
 });
 
+test('cancel route stops a running job', async () => {
+  const job = await (await post({ model: 'mock', prompt: 'slow one' })).json();
+  const res = await fetch(`${base}/api/jobs/${job.id}/cancel`, { method: 'POST' });
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).status, 'canceled');
+  await new Promise((r) => setTimeout(r, 60));
+  assert.equal((await (await fetch(`${base}/api/jobs/${job.id}`)).json()).status, 'canceled');
+  assert.equal((await fetch(`${base}/api/jobs/nope/cancel`, { method: 'POST' })).status, 404);
+});
+
 test('rejects invalid requests', async () => {
   const res = await post({ prompt: '' });
   assert.equal(res.status, 400);
