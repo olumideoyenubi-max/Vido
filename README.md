@@ -108,3 +108,7 @@ test/                Node tests
 npm test                                   # app
 python3 -m unittest worker/test_server.py  # worker API; no GPU needed
 ```
+
+## License
+
+Copyright © 2026 Olumide Oyenubi. All rights reserved. See [LICENSE](LICENSE).
